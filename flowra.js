@@ -6,6 +6,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const addEntityBtn = document.getElementById('add-entity');
     const contextMenu = document.getElementById('context-menu');
     const addDataflowContextBtn = document.getElementById('add-dataflow-context');
+    const deleteDataflowContextBtn = document.getElementById('delete-dataflow-context');
     const editLabelBtn = document.getElementById('edit-label');
     const deleteShapeBtn = document.getElementById('delete-shape');
     const modeSwitch = document.getElementById('mode');
@@ -15,7 +16,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let offsetX = 0;
     let offsetY = 0;
     let shapeCounters = { process: 1, datastore: 1, entity: 2, flow: 2 };
-    let currentMode = 'normal'; // normal, drawing-flow-end
+    let currentMode = 'normal'; // normal, drawing-flow-end, deleting-flow-end
     let flowStartElement = null;
 
     const isEditMode = () => modeSwitch.checked;
@@ -33,7 +34,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function setMode(mode) {
         currentMode = mode;
-        if (mode === 'drawing-flow-end') {
+        if (mode === 'drawing-flow-end' || mode === 'deleting-flow-end') {
             canvas.classList.add('drawing-mode');
         } else {
             canvas.classList.remove('drawing-mode');
@@ -56,6 +57,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function addDataFlow(fromEl, toEl) {
+        // Check if a data flow with the same from and to already exists
+        const existingFlow = document.querySelector(`.data-flow[data-from="${fromEl.id}"][data-to="${toEl.id}"]`);
+        if (existingFlow) {
+            console.log(`Data flow from ${fromEl.id} to ${toEl.id} already exists. Skipping.`);
+            return; // Do not add duplicate flow
+        }
+
         const newFlow = document.createElement('div');
         const newId = `flow${shapeCounters.flow++}`;
         newFlow.id = newId;
@@ -64,6 +72,13 @@ document.addEventListener('DOMContentLoaded', () => {
         newFlow.dataset.to = toEl.id;
         canvas.appendChild(newFlow);
         updateArrows();
+    }
+
+    function deleteDataFlow(fromEl, toEl) {
+        const flowToDelete = document.querySelector(`.data-flow[data-from="${fromEl.id}"][data-to="${toEl.id}"]`);
+        if (flowToDelete) {
+            flowToDelete.remove();
+        }
     }
 
     function getIntersectionPoint(rect, otherCenter) {
@@ -118,13 +133,21 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.button !== 0) return;
         const target = e.target.closest('.diagram-element');
 
+        if (!target) return;
+
         if (currentMode === 'drawing-flow-end' && target && target !== flowStartElement) {
             addDataFlow(flowStartElement, target);
             setMode('normal');
             return;
         }
 
-        if (currentMode === 'normal' && target) {
+        if (currentMode === 'deleting-flow-end' && target && target !== flowStartElement) {
+            deleteDataFlow(flowStartElement, target);
+            setMode('normal');
+            return;
+        }
+
+        if (currentMode === 'normal') {
             e.preventDefault();
             activeElement = target;
             offsetX = activeElement.offsetWidth / 2;
@@ -140,8 +163,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const canvasRect = canvas.getBoundingClientRect();
         let x = e.clientX - offsetX - canvasRect.left;
         let y = e.clientY - offsetY - canvasRect.top;
+        
         x = Math.max(0, Math.min(x, canvas.clientWidth - activeElement.offsetWidth));
         y = Math.max(0, Math.min(y, canvas.clientHeight - activeElement.offsetHeight));
+
         activeElement.style.left = `${x}px`;
         activeElement.style.top = `${y}px`;
         updateArrows();
@@ -157,6 +182,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function handleExport() {
         const exportData = { context: { description: "○○システムについて", "root-process": {}, "external-entity": [], "data-store": [], "data-flow": [] } };
+        
         document.querySelectorAll('.diagram-element').forEach(el => {
             const item = { id: el.id, label: el.querySelector('span').textContent || '', description: "" };
             if (el.classList.contains('process')) {
@@ -166,9 +192,26 @@ document.addEventListener('DOMContentLoaded', () => {
                 exportData.context['external-entity'].push(item);
             }
         });
+
+        const flowsByFrom = new Map();
         document.querySelectorAll('.data-flow').forEach(el => {
-            exportData.context['data-flow'].push({ from: el.dataset.from, to: [el.dataset.to], label: "", description: "" });
+            const from = el.dataset.from;
+            const to = el.dataset.to;
+            if (!flowsByFrom.has(from)) {
+                flowsByFrom.set(from, { to: [], label: "", description: "" });
+            }
+            flowsByFrom.get(from).to.push(to);
         });
+
+        for (const [from, flowData] of flowsByFrom.entries()) {
+            exportData.context['data-flow'].push({
+                from: from,
+                to: flowData.to,
+                label: flowData.label,
+                description: flowData.description
+            });
+        }
+
         const jsonString = JSON.stringify(exportData, null, 2);
         const blob = new Blob([jsonString], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
@@ -246,6 +289,14 @@ document.addEventListener('DOMContentLoaded', () => {
         if (contextTarget) {
             flowStartElement = contextTarget;
             setMode('drawing-flow-end');
+            hideContextMenu();
+        }
+    });
+
+    deleteDataflowContextBtn.addEventListener('click', () => {
+        if (contextTarget) {
+            flowStartElement = contextTarget;
+            setMode('deleting-flow-end');
             hideContextMenu();
         }
     });
