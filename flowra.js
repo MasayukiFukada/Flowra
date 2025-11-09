@@ -1,5 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
     const canvas = document.querySelector('.canvas');
+    const importBtn = document.getElementById('import-btn');
+    const importFile = document.getElementById('import-file');
     const exportBtn = document.getElementById('export-btn');
     const addProcessBtn = document.getElementById('add-process');
     const addDatastoreBtn = document.getElementById('add-datastore');
@@ -42,26 +44,30 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function addShape(type, label) {
-        const newShape = document.createElement('div');
+    function addShape(type, label, top = '20px', left = '20px') {
         const typeName = type.split('-').pop();
         const newId = `${typeName.charAt(0)}${shapeCounters[typeName]++}`;
-        newShape.id = newId;
-        newShape.classList.add('diagram-element', typeName);
-        newShape.style.top = '20px';
-        newShape.style.left = '20px';
+        return addShapeFromData({ id: newId, label: `${newId}: ${label}` }, typeName, top, left);
+    }
+
+    function addShapeFromData(data, type, top = '100px', left = '100px') {
+        const newShape = document.createElement('div');
+        newShape.id = data.id;
+        newShape.classList.add('diagram-element', type);
+        newShape.style.top = top;
+        newShape.style.left = left;
         const span = document.createElement('span');
-        span.textContent = `${newId}: ${label}`;
+        span.textContent = data.label;
         newShape.appendChild(span);
         canvas.appendChild(newShape);
+        return newShape;
     }
 
     function addDataFlow(fromEl, toEl) {
-        // Check if a data flow with the same from and to already exists
         const existingFlow = document.querySelector(`.data-flow[data-from="${fromEl.id}"][data-to="${toEl.id}"]`);
         if (existingFlow) {
             console.log(`Data flow from ${fromEl.id} to ${toEl.id} already exists. Skipping.`);
-            return; // Do not add duplicate flow
+            return;
         }
 
         const newFlow = document.createElement('div');
@@ -184,12 +190,19 @@ document.addEventListener('DOMContentLoaded', () => {
         const exportData = { context: { description: "○○システムについて", "root-process": {}, "external-entity": [], "data-store": [], "data-flow": [] } };
         
         document.querySelectorAll('.diagram-element').forEach(el => {
-            const item = { id: el.id, label: el.querySelector('span').textContent || '', description: "" };
+            const item = { 
+                id: el.id, 
+                label: el.querySelector('span').textContent || '', 
+                description: ""
+            };
             if (el.classList.contains('process')) {
                 if (!exportData.context.process) exportData.context.process = [];
                 exportData.context.process.push(item);
             } else if (el.classList.contains('entity')) {
                 exportData.context['external-entity'].push(item);
+            } else if (el.classList.contains('datastore')) {
+                if (!exportData.context['data-store']) exportData.context['data-store'] = [];
+                exportData.context['data-store'].push(item);
             }
         });
 
@@ -222,6 +235,86 @@ document.addEventListener('DOMContentLoaded', () => {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
+    }
+
+    function clearCanvas() {
+        canvas.querySelectorAll('.diagram-element, .data-flow').forEach(el => el.remove());
+    }
+
+    function loadDiagram(data) {
+        clearCanvas();
+        
+        const allShapes = [
+            ...(data.context.process || []),
+            ...(data.context['external-entity'] || []),
+            ...(data.context['data-store'] || [])
+        ];
+
+        // Reset and update counters
+        shapeCounters = { process: 1, datastore: 1, entity: 1, flow: 1 };
+        allShapes.forEach(shape => {
+            const type = shape.id.charAt(0);
+            const num = parseInt(shape.id.substring(1), 10);
+            if (type === 'p' && num >= shapeCounters.process) shapeCounters.process = num + 1;
+            if (type === 'e' && num >= shapeCounters.entity) shapeCounters.entity = num + 1;
+            if (type === 's' && num >= shapeCounters.datastore) shapeCounters.datastore = num + 1;
+        });
+
+        let currentX = 50;
+        let currentY = 50;
+        const x_spacing = 200;
+        const y_spacing = 150;
+        const canvasWidth = canvas.clientWidth;
+
+        const placeShape = (shapeData, type) => {
+            addShapeFromData(shapeData, type, `${currentY}px`, `${currentX}px`);
+            currentX += x_spacing;
+            if (currentX + x_spacing > canvasWidth) {
+                currentX = 50;
+                currentY += y_spacing;
+            }
+        };
+
+        (data.context.process || []).forEach(p => placeShape(p, 'process'));
+        (data.context['external-entity'] || []).forEach(e => placeShape(e, 'entity'));
+        (data.context['data-store'] || []).forEach(s => placeShape(s, 'datastore'));
+
+        (data.context['data-flow'] || []).forEach(flow => {
+            const fromEl = document.getElementById(flow.from);
+            if (fromEl) {
+                flow.to.forEach(toId => {
+                    const toEl = document.getElementById(toId);
+                    if (toEl) {
+                        addDataFlow(fromEl, toEl);
+                    }
+                });
+            }
+        });
+
+        updateArrows();
+    }
+
+    function handleImport(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const data = JSON.parse(e.target.result);
+                if (data && data.context) {
+                    loadDiagram(data);
+                } else {
+                    alert('無効なファイル形式です。');
+                }
+            } catch (error) {
+                console.error('インポートエラー:', error);
+                alert('ファイルの読み込みまたは解析中にエラーが発生しました。');
+            }
+        };
+        reader.readAsText(file);
+        // Reset file input to allow importing the same file again
+        event.target.value = '';
     }
 
     function showContextMenu(e) {
@@ -280,6 +373,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    importBtn.addEventListener('click', () => importFile.click());
+    importFile.addEventListener('change', handleImport);
     exportBtn.addEventListener('click', handleExport);
     addProcessBtn.addEventListener('click', () => addShape('process', '新規プロセス'));
     addDatastoreBtn.addEventListener('click', () => addShape('datastore', '新規データストア'));
