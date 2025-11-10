@@ -12,6 +12,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const editLabelBtn = document.getElementById('edit-label');
     const deleteShapeBtn = document.getElementById('delete-shape');
     const modeSwitch = document.getElementById('mode');
+    const levelUpBtn = document.getElementById('level-up-btn');
+    const levelDisplay = document.getElementById('level-display');
+    const detailLevelContextBtn = document.getElementById('detail-level-context');
     
     let activeElement = null;
     let contextTarget = null;
@@ -20,6 +23,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let shapeCounters = { process: 1, datastore: 1, entity: 2, flow: 2 };
     let currentMode = 'normal'; // normal, drawing-flow-end, deleting-flow-end
     let flowStartElement = null;
+    let currentLevel = 0;
+    let processContextStack = ['root']; // Stack to manage process context history
+
 
     const isEditMode = () => modeSwitch.checked;
 
@@ -47,7 +53,8 @@ document.addEventListener('DOMContentLoaded', () => {
     function addShape(type, label, top = '20px', left = '20px') {
         const typeName = type.split('-').pop();
         const newId = `${typeName.charAt(0)}${shapeCounters[typeName]++}`;
-        return addShapeFromData({ id: newId, label: `${newId}: ${label}` }, typeName, top, left);
+        const contextId = processContextStack[processContextStack.length - 1];
+        return addShapeFromData({ id: newId, label: label, parent: contextId }, typeName, top, left);
     }
 
     function addShapeFromData(data, type, top = '100px', left = '100px') {
@@ -56,6 +63,7 @@ document.addEventListener('DOMContentLoaded', () => {
         newShape.classList.add('diagram-element', type);
         newShape.style.top = top;
         newShape.style.left = left;
+        newShape.dataset.parent = data.parent || 'root'; // Set parent context
         const span = document.createElement('span');
         span.textContent = data.label;
         newShape.appendChild(span);
@@ -187,24 +195,41 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function handleExport() {
-        const exportData = { context: { description: "○○システムについて", "root-process": {}, "external-entity": [], "data-store": [], "data-flow": [] } };
-        
+        const exportData = { context: { description: "○○システムについて", process: [], "external-entity": [], "data-store": [], "data-flow": [] } };
+        const elements = {};
+
         document.querySelectorAll('.diagram-element').forEach(el => {
             const item = { 
                 id: el.id, 
                 label: el.querySelector('span').textContent || '', 
-                description: ""
+                description: "",
+                parent: el.dataset.parent || 'root'
             };
+            
             if (el.classList.contains('process')) {
-                if (!exportData.context.process) exportData.context.process = [];
-                exportData.context.process.push(item);
+                item.process = [];
+                elements[item.id] = item;
             } else if (el.classList.contains('entity')) {
+                delete item.parent;
                 exportData.context['external-entity'].push(item);
             } else if (el.classList.contains('datastore')) {
-                if (!exportData.context['data-store']) exportData.context['data-store'] = [];
+                delete item.parent;
                 exportData.context['data-store'].push(item);
             }
         });
+
+        const processTree = [];
+        Object.values(elements).forEach(item => {
+            const parentId = item.parent;
+            delete item.parent;
+            if (parentId && elements[parentId]) {
+                elements[parentId].process.push(item);
+            } else {
+                processTree.push(item);
+            }
+        });
+        exportData.context.process = processTree;
+
 
         const flowsByFrom = new Map();
         document.querySelectorAll('.data-flow').forEach(el => {
@@ -252,10 +277,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Reset and update counters
         shapeCounters = { process: 1, datastore: 1, entity: 1, flow: 1 };
+        const recursivelyFindShapes = (processes) => {
+            processes.forEach(shape => {
+                const type = shape.id.charAt(0);
+                const num = parseInt(shape.id.substring(1), 10);
+                if (type === 'p' && num >= shapeCounters.process) shapeCounters.process = num + 1;
+                if (shape.process && shape.process.length > 0) {
+                    recursivelyFindShapes(shape.process);
+                }
+            });
+        };
+        recursivelyFindShapes(data.context.process || []);
+
         allShapes.forEach(shape => {
             const type = shape.id.charAt(0);
             const num = parseInt(shape.id.substring(1), 10);
-            if (type === 'p' && num >= shapeCounters.process) shapeCounters.process = num + 1;
             if (type === 'e' && num >= shapeCounters.entity) shapeCounters.entity = num + 1;
             if (type === 's' && num >= shapeCounters.datastore) shapeCounters.datastore = num + 1;
         });
@@ -266,7 +302,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const y_spacing = 150;
         const canvasWidth = canvas.clientWidth;
 
-        const placeShape = (shapeData, type) => {
+        const placeShape = (shapeData, type, parentId) => {
+            shapeData.parent = parentId;
             addShapeFromData(shapeData, type, `${currentY}px`, `${currentX}px`);
             currentX += x_spacing;
             if (currentX + x_spacing > canvasWidth) {
@@ -275,9 +312,18 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         };
 
-        (data.context.process || []).forEach(p => placeShape(p, 'process'));
-        (data.context['external-entity'] || []).forEach(e => placeShape(e, 'entity'));
-        (data.context['data-store'] || []).forEach(s => placeShape(s, 'datastore'));
+        const placeProcesses = (processes, parentId) => {
+            processes.forEach(p => {
+                placeShape(p, 'process', parentId);
+                if (p.process && p.process.length > 0) {
+                    placeProcesses(p.process, p.id);
+                }
+            });
+        };
+
+        placeProcesses(data.context.process || [], 'root');
+        (data.context['external-entity'] || []).forEach(e => placeShape(e, 'entity', 'root'));
+        (data.context['data-store'] || []).forEach(s => placeShape(s, 'datastore', 'root'));
 
         (data.context['data-flow'] || []).forEach(flow => {
             const fromEl = document.getElementById(flow.from);
@@ -291,7 +337,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        updateArrows();
+        currentLevel = 0;
+        processContextStack = ['root'];
+        renderCanvasForLevel();
     }
 
     function handleImport(event) {
@@ -323,6 +371,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (currentMode !== 'normal') return;
         contextTarget = e.target.closest('.diagram-element');
         if (contextTarget) {
+            const isProcess = contextTarget.classList.contains('process');
+            detailLevelContextBtn.style.display = isProcess ? 'block' : 'none';
             contextMenu.style.top = `${e.clientY}px`;
             contextMenu.style.left = `${e.clientX}px`;
             contextMenu.style.display = 'block';
@@ -336,17 +386,67 @@ document.addEventListener('DOMContentLoaded', () => {
         contextTarget = null;
     }
 
+    function updateLevelDisplay() {
+        const contextId = processContextStack[processContextStack.length - 1];
+        levelDisplay.textContent = `Level ${currentLevel}`;
+        if (contextId !== 'root') {
+            const contextShape = document.getElementById(contextId);
+            const label = contextShape ? contextShape.querySelector('span').textContent : '';
+            levelDisplay.textContent += `: ${label}`;
+        }
+        levelUpBtn.style.display = currentLevel > 0 ? 'inline-block' : 'none';
+    }
+
+    function renderCanvasForLevel() {
+        const contextId = processContextStack[processContextStack.length - 1];
+        const visibleElements = new Set();
+
+        document.querySelectorAll('.diagram-element').forEach(el => {
+            const elContext = el.dataset.parent || 'root';
+            if (elContext === contextId) {
+                el.style.display = '';
+                visibleElements.add(el.id);
+            } else {
+                el.style.display = 'none';
+            }
+        });
+
+        document.querySelectorAll('.data-flow').forEach(flow => {
+            const fromVisible = visibleElements.has(flow.dataset.from);
+            const toVisible = visibleElements.has(flow.dataset.to);
+            if (fromVisible && toVisible) {
+                flow.style.display = '';
+            } else {
+                flow.style.display = 'none';
+            }
+        });
+
+        updateArrows();
+        updateLevelDisplay();
+    }
+
+    function goToDetailLevel(processId) {
+        currentLevel++;
+        processContextStack.push(processId);
+        renderCanvasForLevel();
+    }
+
+    function goToParentLevel() {
+        if (currentLevel > 0) {
+            currentLevel--;
+            processContextStack.pop();
+            renderCanvasForLevel();
+        }
+    }
+
     function handleEditLabel() {
         if (!contextTarget) return;
         const span = contextTarget.querySelector('span');
         if (!span) return;
         const oldLabel = span.textContent;
-        const parts = oldLabel.split(/:(.*)/s);
-        const idPart = parts[0];
-        const textPart = parts[1] ? parts[1].trim() : '';
-        const newText = prompt('新しいラベルを入力してください:', textPart);
+        const newText = prompt('新しいラベルを入力してください:', oldLabel);
         if (newText !== null) {
-            span.textContent = `${idPart}: ${newText.trim()}`;
+            span.textContent = newText.trim();
         }
         hideContextMenu();
     }
@@ -399,7 +499,14 @@ document.addEventListener('DOMContentLoaded', () => {
     editLabelBtn.addEventListener('click', handleEditLabel);
     deleteShapeBtn.addEventListener('click', handleDeleteShape);
     modeSwitch.addEventListener('change', updateEditorControls);
+    detailLevelContextBtn.addEventListener('click', () => {
+        if (contextTarget && contextTarget.classList.contains('process')) {
+            goToDetailLevel(contextTarget.id);
+        }
+        hideContextMenu();
+    });
+    levelUpBtn.addEventListener('click', goToParentLevel);
     
-    updateArrows();
     updateEditorControls(); // Set initial state
+    renderCanvasForLevel(); // Initial render
 });

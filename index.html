@@ -36,6 +36,8 @@
                     <label for="mode">編集モード</label>
                 </div>
                 <div class="actions">
+                    <button id="level-up-btn" style="display: none;">レベルを上げる</button>
+                    <span id="level-display">Level 0</span>
                     <button id="import-btn">インポート</button>
                     <input type="file" id="import-file" accept=".json" style="display: none;">
                     <button id="export-btn">エクスポート</button>
@@ -44,22 +46,7 @@
             <div class="canvas">
                 <h2 class="canvas-title">DFD: ○○システム</h2>
 
-                <!-- サンプル図形 -->
-                <div id="e01" class="diagram-element entity" style="top: 100px; left: 50px;">
-                    <span>e01: 管理者</span>
-                </div>
-                <div id="p0" class="diagram-element process" style="top: 100px; left: 300px;">
-                    <span>p0: ○○システム</span>
-                </div>
-                <div id="s01" class="diagram-element datastore" style="top: 300px; left: 300px;">
-                    <span>s01: □□テーブル</span>
-                </div>
-                 <div id="e02" class="diagram-element entity" style="top: 250px; left: 50px;">
-                    <span>e02: ユーザー</span>
-                </div>
 
-                <!-- サンプル矢印 (管理者 -> ○○システム) -->
-                <div id="flow1" class="data-flow" data-from="e01" data-to="p0"></div>
                 
             </div>
         </main>
@@ -68,6 +55,7 @@
     <div id="context-menu" class="context-menu">
         <div class="context-menu-item" id="add-dataflow-context">データフロー追加</div>
         <div class="context-menu-item" id="delete-dataflow-context">データフロー削除</div>
+        <div class="context-menu-item" id="detail-level-context">詳細レベル</div>
         <div class="context-menu-item" id="edit-label">ラベル編集</div>
         <div class="context-menu-item" id="edit-note">ノート編集</div>
         <div style="border-top: 1px solid var(--border-color); margin: 5px 0;"></div>
