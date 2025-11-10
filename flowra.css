@@ -199,6 +199,11 @@ input:checked + .slider:before {
     justify-content: center; /* To center text horizontally */
 }
 
+.process.no-detail {
+    background-color: #f0f0f0;
+    border-color: #ccc;
+}
+
 .entity {
     border-radius: 8px;
     background-color: #fff8e1;
@@ -217,10 +222,20 @@ input:checked + .slider:before {
 /* 簡易的な矢印 */
 .data-flow {
     position: absolute;
-    width: 100px;
     height: 2px;
     background-color: #333;
     transform-origin: 0 50%;
+    cursor: pointer; /* クリック可能を示すカーソル */
+}
+/* クリック領域を広げるための疑似要素 */
+.data-flow::before {
+    content: '';
+    position: absolute;
+    top: -8px;
+    left: 0;
+    right: 0;
+    bottom: -8px;
+    background: transparent;
 }
 .data-flow::after {
     content: '';
@@ -231,6 +246,19 @@ input:checked + .slider:before {
     border-width: 5px 0 5px 8px;
     border-color: transparent transparent transparent #333;
 }
+
+.data-flow-label {
+    position: absolute;
+    background-color: rgba(255, 255, 255, 0.8);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.8em;
+    white-space: nowrap;
+    pointer-events: none; /* Allow clicks to pass through to the flow line */
+    transform: translate(-50%, -50%);
+    z-index: 1; /* Ensure label is above the flow line */
+}
+
 
 
 .sidebar-menu .menu-item-button {
