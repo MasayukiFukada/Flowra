@@ -17,6 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const detailLevelContextBtn = document.getElementById('detail-level-context');
     const canvasTitle = document.querySelector('.canvas-title'); // 追加
     const clearAllBtn = document.getElementById('clear-all-btn'); // 追加
+    const editCanvasTitleBtn = document.getElementById('edit-canvas-title');
     
     let activeElement = null;
     let contextTarget = null;
@@ -509,11 +510,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
     
 
-        function clearCanvas() {
+                function clearCanvas() {
 
-            canvas.querySelectorAll('.diagram-element, .data-flow, .data-flow-label').forEach(el => el.remove());
+    
 
-        }
+                    if (confirm('キャンバス上のすべての要素を削除してもよろしいですか？')) {
+
+    
+
+                        canvas.querySelectorAll('.diagram-element, .data-flow, .data-flow-label').forEach(el => el.remove());
+
+    
+
+                    }
+
+    
+
+                }
 
     
 
@@ -754,36 +767,26 @@ document.addEventListener('DOMContentLoaded', () => {
             
 
             contextTarget = e.target.closest('.diagram-element, .data-flow');
+            const isCanvasTitle = e.target === canvasTitle;
 
-            if (contextTarget) {
+            if (contextTarget || isCanvasTitle) {
 
                 const editMode = isEditMode();
-
-                const isProcess = contextTarget.classList.contains('process');
-
-                const isDataFlow = contextTarget.classList.contains('data-flow');
-
-    
+                const isProcess = contextTarget && contextTarget.classList.contains('process');
+                const isDataFlow = contextTarget && contextTarget.classList.contains('data-flow');
 
                 // Configure menu items based on mode and target
-
-                document.getElementById('add-dataflow-context').style.display = editMode && !isDataFlow ? 'block' : 'none';
-
-                document.getElementById('delete-dataflow-context').style.display = editMode && !isDataFlow ? 'block' : 'none';
-
-                document.getElementById('edit-label').style.display = editMode && !isDataFlow ? 'block' : 'none';
-
-                document.getElementById('delete-shape').style.display = editMode && !isDataFlow ? 'block' : 'none';
-
-                document.getElementById('detail-level-context').style.display = isProcess ? 'block' : 'none';
-
+                document.getElementById('add-dataflow-context').style.display = editMode && !isDataFlow && !isCanvasTitle ? 'block' : 'none';
+                document.getElementById('delete-dataflow-context').style.display = editMode && !isDataFlow && !isCanvasTitle ? 'block' : 'none';
+                document.getElementById('edit-label').style.display = editMode && !isDataFlow && !isCanvasTitle ? 'block' : 'none';
+                document.getElementById('delete-shape').style.display = editMode && !isDataFlow && !isCanvasTitle ? 'block' : 'none';
+                document.getElementById('detail-level-context').style.display = isProcess && !isCanvasTitle ? 'block' : 'none';
                 document.getElementById('edit-flow-label').style.display = editMode && isDataFlow ? 'block' : 'none';
-
+                document.getElementById('edit-canvas-title').style.display = editMode && isCanvasTitle ? 'block' : 'none';
                 
-
                 const hasVisibleItems = (isProcess && !editMode) || (editMode); // Simplified logic
 
-                if (!hasVisibleItems) {
+                if (!hasVisibleItems && !isCanvasTitle) {
 
                     hideContextMenu();
 
@@ -1055,6 +1058,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     
 
+        function handleEditCanvasTitle() {
+            const oldTitle = canvasTitle.textContent;
+            const newText = prompt('新しいタイトルを入力してください:', oldTitle);
+            if (newText !== null) {
+                canvasTitle.textContent = newText.trim();
+            }
+            hideContextMenu();
+        }
+
+    
+
         function handleDeleteShape() {
 
             if (!contextTarget) return;
@@ -1088,6 +1102,7 @@ document.addEventListener('DOMContentLoaded', () => {
         canvas.addEventListener('mousedown', onMouseDown);
 
         canvas.addEventListener('contextmenu', showContextMenu);
+        canvasTitle.addEventListener('contextmenu', showContextMenu);
 
         window.addEventListener('click', (e) => {
 
@@ -1160,6 +1175,7 @@ document.addEventListener('DOMContentLoaded', () => {
         editLabelBtn.addEventListener('click', handleEditLabel);
 
         document.getElementById('edit-flow-label').addEventListener('click', handleEditFlowLabel);
+        editCanvasTitleBtn.addEventListener('click', handleEditCanvasTitle);
 
         deleteShapeBtn.addEventListener('click', handleDeleteShape);
 
@@ -1178,6 +1194,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         levelUpBtn.addEventListener('click', goToParentLevel);
+        clearAllBtn.addEventListener('click', clearCanvas);
 
         
 
