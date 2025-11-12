@@ -11,6 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const addDataflowContextBtn = document.getElementById('add-dataflow-context');
     const deleteDataflowContextBtn = document.getElementById('delete-dataflow-context');
     const editLabelBtn = document.getElementById('edit-label');
+    const editNoteBtn = document.getElementById('edit-note');
     const deleteShapeBtn = document.getElementById('delete-shape');
     const modeSwitch = document.getElementById('mode');
     const levelUpBtn = document.getElementById('level-up-btn');
@@ -20,8 +21,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const clearAllBtn = document.getElementById('clear-all-btn');
     const editCanvasTitleBtn = document.getElementById('edit-canvas-title');
 
+    const noteModal = document.getElementById('note-modal');
+    const noteTextarea = document.getElementById('note-textarea');
+    const noteSaveBtn = document.getElementById('note-save-btn');
+    const noteCancelBtn = document.getElementById('note-cancel-btn');
+    const modalOverlay = noteModal.querySelector('.modal-overlay');
+
+    const tooltip = document.createElement('div');
+    tooltip.className = 'tooltip';
+    document.body.appendChild(tooltip);
+
     let activeElement = null;
     let contextTarget = null;
+    let currentTargetForNote = null;
     let offsetX = 0;
     let offsetY = 0;
     let shapeCounters = { process: 1, datastore: 1, entity: 2, flow: 2 };
@@ -83,6 +95,7 @@ document.addEventListener('DOMContentLoaded', () => {
         newShape.style.top = top;
         newShape.style.left = left;
         newShape.dataset.parent = data.parent || 'root';
+        newShape.dataset.note = data.description || '';
         const span = document.createElement('span');
         span.textContent = data.label;
         newShape.appendChild(span);
@@ -90,7 +103,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return newShape;
     }
 
-    function addDataFlow(fromEl, toEl, label = "") {
+    function addDataFlow(fromEl, toEl, label = "", description = "") {
         if (document.querySelector(`.data-flow[data-from="${fromEl.id}"][data-to="${toEl.id}"]`)) return;
         const newFlow = document.createElement('div');
         const newId = `flow${shapeCounters.flow++}`;
@@ -98,6 +111,7 @@ document.addEventListener('DOMContentLoaded', () => {
         newFlow.classList.add('data-flow');
         newFlow.dataset.from = fromEl.id;
         newFlow.dataset.to = toEl.id;
+        newFlow.dataset.note = description || '';
         canvasContent.appendChild(newFlow);
         const labelSpan = document.createElement('span');
         labelSpan.className = 'data-flow-label';
@@ -276,13 +290,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function handleExport() {
-        const exportData = { context: { description: "○○システムについて", process: [], "external-entity": [], "data-store": [], "data-flow": [] } };
+        const exportData = { context: { description: canvasTitle.textContent, process: [], "external-entity": [], "data-store": [], "data-flow": [] } };
         const elements = {};
         canvasContent.querySelectorAll('.diagram-element').forEach(el => {
             const item = {
                 id: el.id,
                 label: el.querySelector('span').textContent || '',
-                description: "",
+                description: el.dataset.note || "",
                 parent: el.dataset.parent || 'root',
                 top: el.style.top,
                 left: el.style.left
@@ -315,7 +329,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 from: el.dataset.from,
                 to: el.dataset.to,
                 label: label ? label.textContent : "",
-                description: ""
+                description: el.dataset.note || ""
             });
         });
         const jsonString = JSON.stringify(exportData, null, 2);
@@ -343,6 +357,11 @@ document.addEventListener('DOMContentLoaded', () => {
         zoom = 1;
         updateTransform();
         shapeCounters = { process: 1, datastore: 1, entity: 1, flow: 1 };
+        
+        if (data.context.description) {
+            canvasTitle.textContent = data.context.description;
+        }
+
         const allShapes = [...(data.context['external-entity'] || []), ...(data.context['data-store'] || [])];
         const recursivelyFindShapes = (processes) => {
             processes.forEach(shape => {
@@ -388,14 +407,16 @@ document.addEventListener('DOMContentLoaded', () => {
         (data.context['data-flow'] || []).forEach(flow => {
             const fromEl = document.getElementById(flow.from);
             if (fromEl) {
+                const processFlow = (toId) => {
+                    const toEl = document.getElementById(toId);
+                    if (toEl) {
+                        addDataFlow(fromEl, toEl, flow.label, flow.description);
+                    }
+                };
                 if (Array.isArray(flow.to)) {
-                    flow.to.forEach(toId => {
-                        const toEl = document.getElementById(toId);
-                        if (toEl) addDataFlow(fromEl, toEl, flow.label);
-                    });
-                } else {
-                    const toEl = document.getElementById(flow.to);
-                    if (toEl) addDataFlow(fromEl, toEl, flow.label);
+                    flow.to.forEach(processFlow);
+                } else if (flow.to) {
+                    processFlow(flow.to);
                 }
             }
         });
@@ -439,8 +460,9 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('detail-level-context').style.display = isProcess && !isCanvasTitle ? 'block' : 'none';
             document.getElementById('edit-flow-label').style.display = editMode && isDataFlow ? 'block' : 'none';
             document.getElementById('edit-canvas-title').style.display = editMode && isCanvasTitle ? 'block' : 'none';
+            document.getElementById('edit-note').style.display = editMode && contextTarget ? 'block' : 'none';
             const hasVisibleItems = (isProcess && !editMode) || (editMode);
-            if (!hasVisibleItems && !isCanvasTitle) {
+            if (!hasVisibleItems && !isCanvasTitle && !contextTarget) { // contextTargetがnullの場合も非表示にする
                 hideContextMenu();
                 return;
             }
@@ -547,6 +569,27 @@ document.addEventListener('DOMContentLoaded', () => {
         hideContextMenu();
     }
 
+    function handleEditNote() {
+        if (!contextTarget) return;
+        currentTargetForNote = contextTarget;
+        noteTextarea.value = currentTargetForNote.dataset.note || '';
+        noteModal.style.display = 'flex';
+        noteTextarea.focus();
+        hideContextMenu();
+    }
+
+    function closeNoteModal() {
+        noteModal.style.display = 'none';
+        currentTargetForNote = null;
+    }
+
+    function saveNote() {
+        if (currentTargetForNote) {
+            currentTargetForNote.dataset.note = noteTextarea.value;
+        }
+        closeNoteModal();
+    }
+
     function handleDeleteShape() {
         if (!contextTarget) return;
         const shapeId = contextTarget.id;
@@ -564,7 +607,31 @@ document.addEventListener('DOMContentLoaded', () => {
     canvas.addEventListener('contextmenu', showContextMenu);
     canvasTitle.addEventListener('contextmenu', showContextMenu);
     window.addEventListener('click', (e) => { if (!contextMenu.contains(e.target)) hideContextMenu(); });
-    window.addEventListener('keydown', (e) => { if (e.key === 'Escape') setMode('normal'); });
+    window.addEventListener('keydown', (e) => { 
+        if (e.key === 'Escape') {
+            closeNoteModal();
+        }
+    });
+
+    canvasContent.addEventListener('mouseover', (e) => {
+        const target = e.target.closest('.diagram-element, .data-flow');
+        if (target && target.hasAttribute('data-note')) {
+            tooltip.textContent = target.dataset.note;
+            tooltip.style.display = 'block';
+        }
+    });
+
+    canvasContent.addEventListener('mouseout', (e) => {
+        // マウスが要素から離れたら常にツールチップを非表示にする
+        tooltip.style.display = 'none';
+    });
+
+    canvasContent.addEventListener('mousemove', (e) => {
+        if (tooltip.style.display === 'block') {
+            tooltip.style.left = `${e.clientX + 15}px`;
+            tooltip.style.top = `${e.clientY + 15}px`;
+        }
+    });
 
     // Zoom and Pan Listeners
     canvas.addEventListener('wheel', (e) => {
@@ -625,6 +692,7 @@ document.addEventListener('DOMContentLoaded', () => {
     editLabelBtn.addEventListener('click', handleEditLabel);
     document.getElementById('edit-flow-label').addEventListener('click', handleEditFlowLabel);
     editCanvasTitleBtn.addEventListener('click', handleEditCanvasTitle);
+    editNoteBtn.addEventListener('click', handleEditNote);
     deleteShapeBtn.addEventListener('click', handleDeleteShape);
     modeSwitch.addEventListener('change', updateEditorControls);
     detailLevelContextBtn.addEventListener('click', () => {
@@ -635,6 +703,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     levelUpBtn.addEventListener('click', goToParentLevel);
     clearAllBtn.addEventListener('click', clearCanvas);
+
+    // Note Modal Listeners
+    noteSaveBtn.addEventListener('click', saveNote);
+    noteCancelBtn.addEventListener('click', closeNoteModal);
+    modalOverlay.addEventListener('click', closeNoteModal);
 
     updateEditorControls();
     renderCanvasForLevel();

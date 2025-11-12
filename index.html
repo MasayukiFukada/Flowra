@@ -61,6 +61,18 @@
         <div class="context-menu-item" id="delete-shape">図形の削除</div>
     </div>
 
+    <div id="note-modal" class="modal" style="display: none;">
+        <div class="modal-overlay"></div>
+        <div class="modal-content">
+            <h3 class="modal-title">ノートの編集</h3>
+            <textarea id="note-textarea" class="modal-textarea"></textarea>
+            <div class="modal-actions">
+                <button id="note-cancel-btn" class="modal-button">キャンセル</button>
+                <button id="note-save-btn" class="modal-button primary">保存</button>
+            </div>
+        </div>
+    </div>
+
     <script src="flowra.js"></script>
 </body>
 </html>
