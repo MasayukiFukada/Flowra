@@ -208,7 +208,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 図形がクリックされた場合
         if (target) {
-            // 編集モードの場合のみ図形操作を許可
+            // データフローの追加・削除は編集モードでのみ許可
             if (isEditMode()) {
                 if (currentMode === 'drawing-flow-end' && target !== flowStartElement) {
                     addDataFlow(flowStartElement, target);
@@ -220,21 +220,23 @@ document.addEventListener('DOMContentLoaded', () => {
                     setMode('normal');
                     return;
                 }
-                if (currentMode === 'normal') {
-                    e.preventDefault();
-                    activeElement = target;
-                    
-                    // マウスのキャンバスコンテンツ内でのローカル座標
-                    const mouseX = (e.clientX - canvasRect.left - panX) / zoom;
-                    const mouseY = (e.clientY - canvasRect.top - panY) / zoom;
+            }
 
-                    // ドラッグ開始時のマウスと図形の左上とのオフセットを計算
-                    offsetX = mouseX - (parseFloat(activeElement.style.left) || 0);
-                    offsetY = mouseY - (parseFloat(activeElement.style.top) || 0);
+            // 図形のドラッグは常に許可 (currentModeが'normal'の場合)
+            if (currentMode === 'normal') {
+                e.preventDefault();
+                activeElement = target;
+                
+                // マウスのキャンバスコンテンツ内でのローカル座標
+                const mouseX = (e.clientX - canvasRect.left - panX) / zoom;
+                const mouseY = (e.clientY - canvasRect.top - panY) / zoom;
 
-                    document.addEventListener('mousemove', onMouseMove);
-                    document.addEventListener('mouseup', onMouseUp);
-                }
+                // ドラッグ開始時のマウスと図形の左上とのオフセットを計算
+                offsetX = mouseX - (parseFloat(activeElement.style.left) || 0);
+                offsetY = mouseY - (parseFloat(activeElement.style.top) || 0);
+
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', onMouseUp);
             }
         // 図形以外（キャンバス背景）がクリックされた場合
         } else {
